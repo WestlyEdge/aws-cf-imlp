@@ -1,0 +1,393 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description:
+
+  This template createz
+  infrastructure used for training
+  purposes in the IMLP IAC bootcamp.
+
+Parameters:
+  EC2InstanceType:
+    Type: String
+    AllowedValues:
+      - t2.micro
+    Description: EC2 Instance Type... t2.micro, m1.small, m1.large, etc...
+  EC2ImageId:
+    Type: String
+    Description: The id of the AMI to use
+  VPCCidrBlock:
+    Type: String
+    Description: The primary IPv4 CIDR block for the VPC
+  PublicSubnet1CidrBlock:
+    Type: String
+    Description: The IPv4 CIDR block assigned to the public subnet 1
+  PublicSubnet2CidrBlock:
+    Type: String
+    Description: The IPv4 CIDR block assigned to the public subnet 2
+  PrivateSubnet1CidrBlock:
+    Type: String
+    Description: The IPv4 CIDR block assigned to private subnet 1
+  PrivateSubnet2CidrBlock:
+    Type: String
+    Description: The IPv4 CIDR block assigned to the private subnet 2
+  Subnet1AZ:
+    Type: String
+    Description: The Availability Zone of subnet 1
+  Subnet2AZ:
+    Type: String
+    Description: The Availability Zone of subnet 2
+  Env:
+    Type: String
+    Description: Sandbox, Dev, or Prod
+
+Resources:
+
+# VPC
+
+  myVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCidrBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+
+      Tags:
+        - Key: Name
+          Value: !Join [" ", [XXXX , !Ref Env, VPC ]]
+
+  myInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join [" ", [IMLP, !Ref Env, Internet Gateway]]
+
+  myVPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref myVPC
+      InternetGatewayId: !Ref myInternetGateway
+
+# Public Subnet 1
+
+  myPublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: myVPC
+      CidrBlock: !Ref PublicSubnet1CidrBlock
+      AvailabilityZone: !Ref Subnet1AZ
+      Tags:
+        - Key: Name
+          Value: !Join [" ", [IMLP , !Ref Env, Public Subnet 1]]
+
+  myNatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - myNatEIP1
+          - AllocationId
+      SubnetId:
+        Ref: myPublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Join [" ", [IMLP , !Ref Env, NatGateway1]]
+
+  myNatEIP1:
+    DependsOn: myVPCGatewayAttachment
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  myPublicRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref myPublicSubnetRouteTable
+      SubnetId: !Ref myPublicSubnet1
+
+# Public Subnet 2
+
+  myPublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: myVPC
+      CidrBlock: !Ref PublicSubnet2CidrBlock
+      AvailabilityZone: !Ref Subnet2AZ
+      Tags:
+        - Key: Name
+          Value: !Join [" ", [IMLP, !Ref Env, Public Subnet 2]]
+
+  myNatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - myNatEIP2
+          - AllocationId
+      SubnetId:
+        Ref: myPublicSubnet2
+      Tags:
+        - Key: Name
+          Value: !Join [" ", [IMLP, !Ref Env, NatGateway2]]
+
+  myNatEIP2:
+    DependsOn: myVPCGatewayAttachment
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  myPublicRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref myPublicSubnetRouteTable
+      SubnetId: !Ref myPublicSubnet2
+
+# Public Subnet Route
+
+  myPublicSubnetRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref myVPC
+      Tags:
+        - Key: Name
+          Value: !Join [" ", [IMLP, !Ref Env, Public Routes]]
+
+  myPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: myVPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref myPublicSubnetRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref myInternetGateway
+
+# Private Subnet 1
+
+  myPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: myVPC
+      CidrBlock: !Ref PrivateSubnet1CidrBlock
+      AvailabilityZone: !Ref Subnet1AZ
+      Tags:
+        - Key: Name
+          Value: !Join [" ", [IMLP , !Ref Env, Private Subnet 1]]
+
+  myEC2Instance1:
+    Type: AWS::EC2::Instance
+
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          packages:
+            yum:
+              httpd: []
+              php: []
+          files:
+            /var/www/html/index.php:
+              content: !Sub |
+                <?php print "Hello World, IMLP was here, it works!, ${Env} 1"; ?>
+          services:
+            sysvinit:
+              httpd:
+                enabled: true
+                ensureRunning: true
+
+    Properties:
+      InstanceType: !Ref EC2InstanceType
+      ImageId: !Ref EC2ImageId
+      SecurityGroupIds:
+        - !Ref myEC2SecurityGroup
+      SubnetId: !Ref myPrivateSubnet1
+      Tags:
+        - Key: Name
+          Value: !Join [" ", [IMLP, !Ref Env, EC2 Instance 1]]
+
+      UserData:
+        'Fn::Base64':
+          !Sub |
+          #!bin/bash -xe
+          yum install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource myEC2Instance1 --region ${AWS::Region}
+
+  myEC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Open port 80
+      VpcId: !Ref myVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          SourceSecurityGroupId: !GetAtt myALBSecurityGroup.GroupId
+
+# Private Subnet 1 Routes
+
+  myPrivateSubnetRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref myVPC
+      Tags:
+        - Key: Name
+          Value: !Join [" ", [IMLP, !Ref Env, Private Route Table 1]]
+
+  myPrivateRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: myNatGateway1
+    Properties:
+      RouteTableId: !Ref myPrivateSubnetRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref myNatGateway1
+
+  myPrivateRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref myPrivateSubnetRouteTable1
+      SubnetId: !Ref myPrivateSubnet1
+
+# Private Subnet 2
+
+  myPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: myVPC
+      CidrBlock: !Ref PrivateSubnet2CidrBlock
+      AvailabilityZone: !Ref Subnet2AZ
+      Tags:
+        - Key: Name
+          Value: !Join [" ", [IMLP, !Ref Env, Private Subnet 2]]
+
+  myEC2Instance2:
+    Type: AWS::EC2::Instance
+
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          packages:
+            yum:
+              httpd: []
+              php: []
+          files:
+            /var/www/html/index.php:
+              content: !Sub |
+                <?php print "Hello World, IMLP was here, it works!, ${Env} 2"; ?>
+          services:
+            sysvinit:
+              httpd:
+                enabled: true
+                ensureRunning: true
+
+    Properties:
+      InstanceType: !Ref EC2InstanceType
+      ImageId: !Ref EC2ImageId
+      SecurityGroupIds:
+        - !Ref myEC2SecurityGroup
+      SubnetId: !Ref myPrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: !Join [" ", [IMLP, !Ref Env, EC2 Instance 2]]
+
+      UserData:
+        'Fn::Base64':
+          !Sub |
+          #!bin/bash -xe
+          yum install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource myEC2Instance2 --region ${AWS::Region}
+
+# Private Subnet 2 Routes
+
+  myPrivateSubnetRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref myVPC
+      Tags:
+        - Key: Name
+          Value: !Join [" ", [IMLP, !Ref Env, Private RouteTable 2]]
+
+  myPrivateRoute2:
+    Type: AWS::EC2::Route
+    DependsOn: myNatGateway2
+    Properties:
+      RouteTableId: !Ref myPrivateSubnetRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref myNatGateway2
+
+  myPrivateRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref myPrivateSubnetRouteTable2
+      SubnetId: !Ref myPrivateSubnet2
+
+# Load Balancer
+
+  myALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      IpAddressType: ipv4
+      Name: !Join [ "-", [ IMLP, !Ref Env, Load-Balancer ] ]
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref myALBSecurityGroup
+      Subnets:
+        - !Ref myPublicSubnet1
+        - !Ref myPublicSubnet2
+      Tags:
+        - Key: Name
+          Value: !Join [" ", [IMLP, !Ref Env, ALB]]
+
+  myALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Open port 80
+      VpcId: !Ref myVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+
+  myALBListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    DependsOn:
+      - myALB
+      - myALBTargetGroup
+    Properties:
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref myALBTargetGroup
+      LoadBalancerArn: !Ref myALB
+      Port: 80
+      Protocol: "HTTP"
+
+  myALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Join [ "-", [ IMLP, !Ref Env, ALB-TargetGroup ] ]
+      VpcId: !Ref myVPC
+      HealthCheckEnabled: true
+      TargetType: instance
+      Protocol: HTTP
+      Port: 80
+      Targets:
+        - Id: !Ref myEC2Instance1
+        - Id: !Ref myEC2Instance2
+      Tags:
+        - Key: Name
+          Value: !Join [ " ", [ IMLP, !Ref Env, ALB TargetGroup ] ]
+
+# Outputs
+
+Outputs:
+
+  LoadBalancerDNS:
+    Description:
+      The Load Balancer DNS Path
+    Value:
+      !GetAtt
+      - myALB
+      - DNSName

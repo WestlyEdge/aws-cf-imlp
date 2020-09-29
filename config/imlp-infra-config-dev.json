@@ -1,0 +1,17 @@
+{
+  "Parameters" : {
+    "EC2InstanceType" : "t2.micro",
+    "EC2ImageId" : "ami-00c03f7f7f2ec15c3",
+    "VPCCidrBlock" : "10.0.0.0/16",
+    "PublicSubnet1CidrBlock" : "10.0.3.0/24",
+    "PublicSubnet2CidrBlock" : "10.0.4.0/24",
+    "PrivateSubnet1CidrBlock" : "10.0.1.0/24",
+    "PrivateSubnet2CidrBlock" : "10.0.2.0/24",
+    "Subnet1AZ" : "us-east-2a",
+    "Subnet2AZ" : "us-east-2b",
+    "Env" : "Dev"
+  },
+  "Tags" : {
+    "Env" : "Dev"
+  }
+}
